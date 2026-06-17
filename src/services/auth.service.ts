@@ -41,15 +41,18 @@ export class AuthService {
 
     async resetPassword(accessToken: string, newPassword: string) {
         const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-            global: {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                },
-            },
             auth: {
                 persistSession: false,
+                autoRefreshToken: false,
             },
         });
+
+        // Set the session context for this client instance
+        const { error: sessionError } = await userClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: accessToken, // Use access token as a fallback to satisfy GoTrue validation
+        });
+        if (sessionError) throw sessionError;
 
         const { data, error } = await userClient.auth.updateUser({
             password: newPassword,

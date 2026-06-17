@@ -18,7 +18,7 @@ POST {{base}}/api/v1/auth/signup
 Content-Type: application/json
 
 {
-  "email": "akag34ege87@gmail.com",
+  "email": "test@gmail.com",
   "password": "strongPassword123"
 }
 
@@ -28,7 +28,7 @@ POST {{base}}/api/v1/auth/login
 Content-Type: application/json
 
 {
-  "email": "testuser1234567@gmail.com",
+  "email": "test@gmail.com",
   "password": "strongPassword123"
 }
 
@@ -49,7 +49,7 @@ POST {{base}}/api/v1/auth/forgot-password
 Content-Type: application/json
 
 {
-  "email": "testuser1234567@gmail.com",
+  "email": "test1@gmail.com",
   "redirectTo": "http://localhost:3000/reset-password"
 }
 
