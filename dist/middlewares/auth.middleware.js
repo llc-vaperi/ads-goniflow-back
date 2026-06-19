@@ -1,19 +1,51 @@
 import { supabase } from "../config/supabase.js";
 export const requireAuth = async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            res.status(401).json({ success: false, error: "Access token is missing or invalid" });
-            return;
+        let token = req.cookies["sb-access-token"];
+        // Optional fallback to Authorization Bearer header
+        if (!token &&
+            req.headers.authorization &&
+            req.headers.authorization.startsWith("Bearer ")) {
+            token = req.headers.authorization.split(" ")[1];
         }
-        const token = authHeader.split(" ")[1];
-        const { data: { user }, error } = await supabase.auth.getUser(token);
-        if (error || !user) {
-            res.status(401).json({ success: false, error: "Unauthorized" });
-            return;
+        if (token) {
+            const { data: { user }, error, } = await supabase.auth.getUser(token);
+            if (!error && user) {
+                req.user = user;
+                return next();
+            }
         }
-        req.user = user;
-        next();
+        // Access token is missing or expired, try to refresh using refresh_token
+        const refreshToken = req.cookies["sb-refresh-token"];
+        if (refreshToken) {
+            const { data, error } = await supabase.auth.refreshSession({
+                refresh_token: refreshToken,
+            });
+            if (!error && data.session) {
+                // Set the new access and refresh tokens in cookies
+                res.cookie("sb-access-token", data.session.access_token, {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === "production",
+                    sameSite: "lax",
+                    maxAge: data.session.expires_in * 1000,
+                });
+                res.cookie("sb-refresh-token", data.session.refresh_token, {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === "production",
+                    sameSite: "lax",
+                    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+                });
+                req.user = data.session.user;
+                return next();
+            }
+        }
+        // If both token verification and refresh fail, clear cookies and deny access
+        res.clearCookie("sb-access-token");
+        res.clearCookie("sb-refresh-token");
+        res.status(401).json({
+            success: false,
+            error: "Unauthorized: Session expired or invalid",
+        });
     }
     catch (error) {
         next(error);
