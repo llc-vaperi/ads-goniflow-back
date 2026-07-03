@@ -1,17 +1,10 @@
 @base = http://localhost:3001
 
-
 ###
 get {{base}}/
 
-###
-get {{base}}/api/v1/test
 
-###
-get {{base}}/api/v1/users
-
-
-# ==================== SUPABASE AUTH TEST ENDPOINTS ====================
+# ==================== AUTH ====================
 
 ### 1. Register a new user
 POST {{base}}/api/v1/auth/signup
@@ -22,7 +15,7 @@ Content-Type: application/json
   "password": "strongPassword123"
 }
 
-### 2. Login to get Access Token (JWT)
+### 2. Login to get session cookies
 # @name login
 POST {{base}}/api/v1/auth/login
 Content-Type: application/json
@@ -32,9 +25,8 @@ Content-Type: application/json
   "password": "strongPassword123"
 }
 
-### Capture JWT Token from Login Response
+### Capture JWT Token from Login Response (fallback for Bearer auth)
 @token = {{login.response.body.data.session.access_token}}
-
 
 ### 3. Get Current User Info (Authorized - cookies are automatically sent)
 GET {{base}}/api/v1/auth/me
@@ -42,7 +34,6 @@ GET {{base}}/api/v1/auth/me
 ### 4. Get Current User Info (Fallback with Bearer token if cookies are disabled)
 GET {{base}}/api/v1/auth/me
 Authorization: Bearer {{token}}
-
 
 ### 5. Forgot Password (Request reset email)
 POST {{base}}/api/v1/auth/forgot-password
@@ -61,16 +52,93 @@ Content-Type: application/json
   "newPassword": "newStrongPassword456"
 }
 
-
 ### 7. Logout (Clears cookies automatically)
 POST {{base}}/api/v1/auth/logout
 Content-Type: application/json
 
 
+# ==================== PROJECTS ====================
+# ყველა route ქვემოთ საჭიროებს ავტორიზაციას (login-ის cookie-ები)
+
+### 8. List projects
+GET {{base}}/api/v1/projects
+
+### 9. Create a project
+# @name createProject
+POST {{base}}/api/v1/projects
+Content-Type: application/json
+
+{
+  "name": "My Project",
+  "link": "https://example.com",
+  "description": "Test project",
+  "logo_url": "https://.../logo.png"
+}
+
+### Capture created project id
+@projectId = {{createProject.response.body.data.id}}
+
+### 10. Update a project
+PUT {{base}}/api/v1/projects/{{projectId}}
+Content-Type: application/json
+
+{
+  "name": "My Project Updated",
+  "link": "https://example.com",
+  "description": "Updated description",
+  "logo_url": "https://.../logo.png"
+}
+
+### 11. Delete a project
+DELETE {{base}}/api/v1/projects/{{projectId}}
+
+
+# ==================== SAVED ADS ====================
+
+### 12. List saved ads for a project
+GET {{base}}/api/v1/projects/{{projectId}}/ads
+
+### 13. Save an ad
+# @name saveAd
+POST {{base}}/api/v1/projects/{{projectId}}/ads
+Content-Type: application/json
+
+{
+  "platform": "facebook",
+  "tone": "friendly",
+  "headline": "Big Sale!",
+  "text": "Get 50% off today only.",
+  "cta": "Shop Now",
+  "image_url": "https://.../ad-image.png"
+}
+
+### Capture created ad id
+@adId = {{saveAd.response.body.data.id}}
+
+### 14. Delete a saved ad
+DELETE {{base}}/api/v1/projects/{{projectId}}/ads/{{adId}}
+
+
+# ==================== UPLOADS ====================
+# multipart/form-data - სურათის ატვირთვა Supabase Storage-ში (ad-assets bucket)
+# პასუხი: { "success": true, "data": { "url": "https://.../ad-assets/<userId>/<uuid>.png" } }
+
+### 15. Upload an image
+POST {{base}}/api/v1/uploads
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+
+------WebKitFormBoundary
+Content-Disposition: form-data; name="image"; filename="sample.png"
+Content-Type: image/png
+
+< ./sample.png
+------WebKitFormBoundary--
+
+
 # ==================== RATE LIMIT TESTING ====================
 
 ### Rate limit test: Try sending this request 6 times consecutively
-# It will return 429 Too Many Requests on the 6th attempt
+# It will return 429 Too Many Requests on the 6th attempt (authLimiter: 5 req / 15 min)
 POST {{base}}/api/v1/auth/login
 Content-Type: application/json
 
