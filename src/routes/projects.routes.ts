@@ -8,6 +8,7 @@ import {
     saveAd,
     deleteSavedAd
 } from "../controllers/projects.controller.js";
+import { generateAd } from "../controllers/generate.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 
 const router = Router();
@@ -25,6 +26,9 @@ router.delete("/:id", deleteProject);
 router.get("/:projectId/ads", getSavedAds);
 router.post("/:projectId/ads", saveAd);
 router.delete("/:projectId/ads/:adId", deleteSavedAd);
+
+// AI-generated ad copy
+router.post("/:projectId/generate", generateAd);
 
 export default router;
 

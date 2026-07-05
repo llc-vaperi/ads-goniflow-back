@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getProjects, createProject, deleteProject, updateProject, getSavedAds, saveAd, deleteSavedAd } from "../controllers/projects.controller.js";
+import { generateAd } from "../controllers/generate.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 const router = Router();
 // Protect all routes
@@ -13,4 +14,6 @@ router.delete("/:id", deleteProject);
 router.get("/:projectId/ads", getSavedAds);
 router.post("/:projectId/ads", saveAd);
 router.delete("/:projectId/ads/:adId", deleteSavedAd);
+// AI-generated ad copy
+router.post("/:projectId/generate", generateAd);
 export default router;
