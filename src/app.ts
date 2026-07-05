@@ -24,7 +24,7 @@ app.use(express.json());
 
 // Default route
 app.get("/", (req, res) => {
-    res.json("API is working. Access endpoints via /api/users");
+    res.json("API is working");
 });
 
 app.use("/api/v1", apiLimiter, router);
