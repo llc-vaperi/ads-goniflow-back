@@ -44,6 +44,31 @@ create policy "Users manage their own saved ads"
     using (auth.uid() = user_id)
     with check (auth.uid() = user_id);
 
+create table if not exists public.calendar_events (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    project_id uuid references public.projects(id) on delete cascade,
+    platform text,
+    tone text,
+    headline text default '',
+    text text default '',
+    cta text default '',
+    start_time timestamptz not null,
+    all_day boolean not null default false,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists calendar_events_user_id_idx on public.calendar_events(user_id);
+create index if not exists calendar_events_project_id_idx on public.calendar_events(project_id);
+
+alter table public.calendar_events enable row level security;
+
+create policy "Users manage their own calendar events"
+    on public.calendar_events
+    for all
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
 -- Storage bucket for project logos / saved-ad images.
 insert into storage.buckets (id, name, public)
 values ('ad-assets', 'ad-assets', true)

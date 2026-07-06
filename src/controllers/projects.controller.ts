@@ -144,6 +144,19 @@ export async function getSavedAds(req: Request, res: Response, next: NextFunctio
             return;
         }
 
+        const { data: project, error: projectError } = await supabase
+            .from("projects")
+            .select("id")
+            .eq("id", projectId)
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (projectError) throw projectError;
+        if (!project) {
+            res.status(404).json({ success: false, error: "Project not found" });
+            return;
+        }
+
         const { data, error } = await supabase
             .from("saved_ads")
             .select("*")
@@ -180,6 +193,19 @@ export async function saveAd(req: Request, res: Response, next: NextFunction): P
         const { platform, tone, headline, text, cta, image_url } = req.body;
         if (!text) {
             res.status(400).json({ success: false, error: "Ad text is required" });
+            return;
+        }
+
+        const { data: project, error: projectError } = await supabase
+            .from("projects")
+            .select("id")
+            .eq("id", projectId)
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (projectError) throw projectError;
+        if (!project) {
+            res.status(404).json({ success: false, error: "Project not found" });
             return;
         }
 

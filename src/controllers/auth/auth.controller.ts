@@ -1,19 +1,24 @@
 import { Request, Response, NextFunction } from "express";
 import { signUp, signIn, signOut, forgotPassword as reqForgotPassword, resetPassword as reqResetPassword } from "./auth.service.js";
 
+// In production the frontend and backend typically live on different origins,
+// which requires SameSite=None (and therefore Secure) for the browser to send the cookie cross-site.
+const isProduction = process.env.NODE_ENV === "production";
+const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+};
+
 // Helper function to set auth cookies
 export function setAuthCookies(res: Response, session: any): void {
     if (session) {
         res.cookie("sb-access-token", session.access_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            ...cookieOptions,
             maxAge: session.expires_in * 1000,
         });
         res.cookie("sb-refresh-token", session.refresh_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            ...cookieOptions,
             maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         });
     }
@@ -21,8 +26,8 @@ export function setAuthCookies(res: Response, session: any): void {
 
 // Helper function to clear auth cookies
 export function clearAuthCookies(res: Response): void {
-    res.clearCookie("sb-access-token");
-    res.clearCookie("sb-refresh-token");
+    res.clearCookie("sb-access-token", cookieOptions);
+    res.clearCookie("sb-refresh-token", cookieOptions);
 }
 
 // Helper function to sanitize user object to only expose safe/necessary fields
@@ -119,12 +124,13 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
         }
 
         const token = req.cookies["sb-access-token"];
-        if (!token) {
+        const refreshToken = req.cookies["sb-refresh-token"];
+        if (!token || !refreshToken) {
             res.status(401).json({ success: false, error: "Unauthorized: Missing reset token" });
             return;
         }
 
-        const data = await reqResetPassword(token, newPassword);
+        const data = await reqResetPassword(token, refreshToken, newPassword);
         // Clear cookies after password reset to force user to log in again with the new password
         clearAuthCookies(res);
         res.status(200).json({ success: true, message: "Password reset successfully", data: { user: sanitizeUser(data.user) } });

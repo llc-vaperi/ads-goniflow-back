@@ -119,6 +119,42 @@ Content-Type: application/json
 DELETE {{base}}/api/v1/projects/{{projectId}}/ads/{{adId}}
 
 
+# ==================== CALENDAR ====================
+
+### 16. List calendar events
+GET {{base}}/api/v1/calendar
+
+### 17. Create a calendar event
+# @name createEvent
+POST {{base}}/api/v1/calendar
+Content-Type: application/json
+
+{
+  "project_id": "{{projectId}}",
+  "platform": "facebook",
+  "tone": "friendly",
+  "headline": "Big Sale!",
+  "text": "Get 50% off today only.",
+  "cta": "Shop Now",
+  "start_time": "2026-08-01T10:00:00Z",
+  "all_day": false
+}
+
+### Capture created event id
+@eventId = {{createEvent.response.body.data.id}}
+
+### 18. Update a calendar event (e.g. drag/drop reschedule)
+PUT {{base}}/api/v1/calendar/{{eventId}}
+Content-Type: application/json
+
+{
+  "start_time": "2026-08-02T10:00:00Z"
+}
+
+### 19. Delete a calendar event
+DELETE {{base}}/api/v1/calendar/{{eventId}}
+
+
 # ==================== UPLOADS ====================
 # multipart/form-data - სურათის ატვირთვა Supabase Storage-ში (ad-assets bucket)
 # პასუხი: { "success": true, "data": { "url": "https://.../ad-assets/<userId>/<uuid>.png" } }

@@ -1,0 +1,173 @@
+import { Request, Response, NextFunction } from "express";
+import { supabase } from "../config/supabase.js";
+
+const ALLOWED_PLATFORMS = ["facebook", "instagram", "linkedin", "x"];
+const ALLOWED_TONES = ["professional", "friendly", "funny", "bold"];
+
+// GET /api/v1/calendar
+export async function getCalendarEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            res.status(401).json({ success: false, error: "Unauthorized" });
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from("calendar_events")
+            .select("*")
+            .eq("user_id", userId)
+            .order("start_time", { ascending: true });
+
+        if (error) {
+            console.error("Supabase calendar_events query error:", error);
+            if (error.code === "P0001" || error.message.includes("does not exist")) {
+                res.status(200).json({ success: true, data: [], warning: "SQL tables not created yet in Supabase" });
+                return;
+            }
+            throw error;
+        }
+
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+// POST /api/v1/calendar
+export async function createCalendarEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            res.status(401).json({ success: false, error: "Unauthorized" });
+            return;
+        }
+
+        const { project_id, platform, tone, headline, text, cta, start_time, all_day } = req.body;
+
+        if (!start_time) {
+            res.status(400).json({ success: false, error: "start_time is required" });
+            return;
+        }
+        if (platform && !ALLOWED_PLATFORMS.includes(platform)) {
+            res.status(400).json({ success: false, error: `platform must be one of: ${ALLOWED_PLATFORMS.join(", ")}` });
+            return;
+        }
+        if (tone && !ALLOWED_TONES.includes(tone)) {
+            res.status(400).json({ success: false, error: `tone must be one of: ${ALLOWED_TONES.join(", ")}` });
+            return;
+        }
+
+        if (project_id) {
+            const { data: project, error: projectError } = await supabase
+                .from("projects")
+                .select("id")
+                .eq("id", project_id)
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (projectError) throw projectError;
+            if (!project) {
+                res.status(404).json({ success: false, error: "Project not found" });
+                return;
+            }
+        }
+
+        const { data, error } = await supabase
+            .from("calendar_events")
+            .insert([
+                {
+                    user_id: userId,
+                    project_id: project_id || null,
+                    platform,
+                    tone,
+                    headline: headline || "",
+                    text: text || "",
+                    cta: cta || "",
+                    start_time,
+                    all_day: !!all_day
+                }
+            ])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+// PUT /api/v1/calendar/:id
+export async function updateCalendarEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+        const userId = req.user?.id;
+        const { id } = req.params;
+
+        if (!userId) {
+            res.status(401).json({ success: false, error: "Unauthorized" });
+            return;
+        }
+
+        const { project_id, platform, tone, headline, text, cta, start_time, all_day } = req.body;
+
+        if (platform && !ALLOWED_PLATFORMS.includes(platform)) {
+            res.status(400).json({ success: false, error: `platform must be one of: ${ALLOWED_PLATFORMS.join(", ")}` });
+            return;
+        }
+        if (tone && !ALLOWED_TONES.includes(tone)) {
+            res.status(400).json({ success: false, error: `tone must be one of: ${ALLOWED_TONES.join(", ")}` });
+            return;
+        }
+
+        const updates: Record<string, unknown> = {};
+        if (project_id !== undefined) updates.project_id = project_id || null;
+        if (platform !== undefined) updates.platform = platform;
+        if (tone !== undefined) updates.tone = tone;
+        if (headline !== undefined) updates.headline = headline;
+        if (text !== undefined) updates.text = text;
+        if (cta !== undefined) updates.cta = cta;
+        if (start_time !== undefined) updates.start_time = start_time;
+        if (all_day !== undefined) updates.all_day = !!all_day;
+
+        const { data, error } = await supabase
+            .from("calendar_events")
+            .update(updates)
+            .eq("id", id)
+            .eq("user_id", userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+// DELETE /api/v1/calendar/:id
+export async function deleteCalendarEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+        const userId = req.user?.id;
+        const { id } = req.params;
+
+        if (!userId) {
+            res.status(401).json({ success: false, error: "Unauthorized" });
+            return;
+        }
+
+        const { error } = await supabase
+            .from("calendar_events")
+            .delete()
+            .eq("id", id)
+            .eq("user_id", userId);
+
+        if (error) throw error;
+
+        res.status(200).json({ success: true, message: "Calendar event deleted successfully" });
+    } catch (error) {
+        next(error);
+    }
+}
