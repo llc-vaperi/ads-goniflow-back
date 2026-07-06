@@ -1,9 +1,17 @@
 import { Request, Response, NextFunction } from "express";
-import { Type } from "@google/genai";
+import { Type, Modality } from "@google/genai";
 import { supabase } from "../config/supabase.js";
 import { getGemini } from "../config/gemini.js";
+import { uploadBufferToStorage } from "../services/storage.service.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+
+const MIME_TO_EXT: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+};
 
 const adSchema = {
     type: Type.OBJECT,
@@ -57,7 +65,8 @@ ${imagePrompt ? `სურათის კონტექსტი: ${imagePromp
 დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
 
         const ai = getGemini();
-        const response = await ai.models.generateContent({
+
+        const textCall = ai.models.generateContent({
             model: MODEL,
             contents: prompt,
             config: {
@@ -66,9 +75,44 @@ ${imagePrompt ? `სურათის კონტექსტი: ${imagePromp
             },
         });
 
-        const parsed = JSON.parse(response.text ?? "{}");
+        const imagePromptText = imagePrompt
+            || `რეკლამის სურათი ${platform} პლატფორმისთვის. პროექტი: ${project.name}. აღწერა: ${project.description || "არ არის მითითებული"}.`;
 
-        res.status(200).json({ success: true, data: parsed });
+        const imageCall = ai.models.generateContent({
+            model: IMAGE_MODEL,
+            contents: imagePromptText,
+            config: {
+                responseModalities: [Modality.TEXT, Modality.IMAGE],
+            },
+        });
+
+        const [textResult, imageResult] = await Promise.allSettled([textCall, imageCall]);
+
+        if (textResult.status === "rejected") {
+            throw textResult.reason;
+        }
+
+        const parsed = JSON.parse(textResult.value.text ?? "{}");
+
+        let imageUrl: string | null = null;
+        if (imageResult.status === "fulfilled") {
+            try {
+                const parts = imageResult.value.candidates?.[0]?.content?.parts ?? [];
+                const imagePart = parts.find((p) => p.inlineData?.data);
+                if (imagePart?.inlineData?.data) {
+                    const mimeType = imagePart.inlineData.mimeType || "image/png";
+                    const extension = MIME_TO_EXT[mimeType] || "png";
+                    const buffer = Buffer.from(imagePart.inlineData.data, "base64");
+                    imageUrl = await uploadBufferToStorage(userId, buffer, mimeType, extension);
+                }
+            } catch (imageError) {
+                console.error("Image generation/upload failed:", imageError);
+            }
+        } else {
+            console.error("Gemini image generation failed:", imageResult.reason);
+        }
+
+        res.status(200).json({ success: true, data: { ...parsed, imageUrl } });
     } catch (error) {
         next(error);
     }

@@ -1,8 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { randomUUID } from "crypto";
-import { getSupabaseAdmin } from "../config/supabaseAdmin.js";
-
-const BUCKET = "ad-assets";
+import { uploadBufferToStorage } from "../services/storage.service.js";
 
 export async function uploadImage(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -12,21 +9,9 @@ export async function uploadImage(req: Request, res: Response, next: NextFunctio
         }
 
         const extension = req.file.originalname.split(".").pop() || "bin";
-        const path = `${req.user?.id}/${randomUUID()}.${extension}`;
-        const supabaseAdmin = getSupabaseAdmin();
+        const url = await uploadBufferToStorage(req.user!.id, req.file.buffer, req.file.mimetype, extension);
 
-        const { error } = await supabaseAdmin.storage
-            .from(BUCKET)
-            .upload(path, req.file.buffer, {
-                contentType: req.file.mimetype,
-                upsert: false,
-            });
-
-        if (error) throw error;
-
-        const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
-
-        res.status(201).json({ success: true, data: { url: data.publicUrl } });
+        res.status(201).json({ success: true, data: { url } });
     } catch (error) {
         next(error);
     }
