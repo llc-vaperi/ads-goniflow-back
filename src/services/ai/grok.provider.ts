@@ -1,8 +1,10 @@
 import OpenAI from "openai";
 import { AdCopy, AdCopyParams, AiProvider, GeneratedImage } from "./types.js";
 
-const TEXT_MODEL = process.env.GROK_TEXT_MODEL || "grok-4.5";
-const IMAGE_MODEL = process.env.GROK_IMAGE_MODEL || "grok-2-image";
+// grok-4.5 is region-restricted (blocked in the EU as of mid-2026) — grok-4.3 has no such
+// restriction, so it's the safer default; override with GROK_TEXT_MODEL where 4.5 is available.
+const TEXT_MODEL = process.env.GROK_TEXT_MODEL || "grok-4.3";
+const IMAGE_MODEL = process.env.GROK_IMAGE_MODEL || "grok-imagine-image-quality";
 
 let client: OpenAI | undefined;
 
@@ -33,10 +35,13 @@ ${imagePrompt ? `სურათის კონტექსტი: ${imagePromp
 დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
 }
 
+const NO_TEXT_INSTRUCTION = "სურათზე არ უნდა იყოს არანაირი ტექსტი, წარწერა, ასოები, ციფრები ან watermark — მხოლოდ სუფთა ვიზუალი.";
+
 function buildImagePrompt(params: AdCopyParams): string {
     const { platform, projectName, projectDescription, imagePrompt } = params;
-    return imagePrompt
+    const basePrompt = imagePrompt
         || `რეკლამის სურათი ${platform} პლატფორმისთვის. პროექტი: ${projectName}. აღწერა: ${projectDescription || "არ არის მითითებული"}.`;
+    return `${basePrompt} ${NO_TEXT_INSTRUCTION}`;
 }
 
 async function generateText(params: AdCopyParams): Promise<AdCopy> {
@@ -74,7 +79,11 @@ async function generateImage(params: AdCopyParams): Promise<GeneratedImage | nul
     });
 
     const url = response.data?.[0]?.url;
-    return url ? { url } : null;
+    if (!url) {
+        console.warn("[grok.provider] generateImage returned no image URL — response.data:", response.data);
+        return null;
+    }
+    return { url };
 }
 
 export const grokProvider: AiProvider = { generateText, generateImage };

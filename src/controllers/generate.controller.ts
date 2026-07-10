@@ -41,6 +41,8 @@ export async function generateAd(req: Request, res: Response, next: NextFunction
             projectLink: project.link,
         };
 
+        const providerName = process.env.AI_PROVIDER === "grok" ? "grok" : "gemini";
+        const logContext = `[generate] provider=${providerName} projectId=${projectId} platform=${platform} tone=${tone}`;
         const provider = getProvider();
 
         const [textResult, imageResult] = await Promise.allSettled([
@@ -49,6 +51,7 @@ export async function generateAd(req: Request, res: Response, next: NextFunction
         ]);
 
         if (textResult.status === "rejected") {
+            console.error(`${logContext} — TEXT generation failed:`, textResult.reason);
             throw textResult.reason;
         }
 
@@ -60,10 +63,12 @@ export async function generateAd(req: Request, res: Response, next: NextFunction
                     ? image.url
                     : await uploadBufferToStorage(userId, image.buffer, image.mimeType, image.extension);
             } catch (imageError) {
-                console.error("Image generation/upload failed:", imageError);
+                console.error(`${logContext} — image upload failed:`, imageError);
             }
         } else if (imageResult.status === "rejected") {
-            console.error("AI image generation failed:", imageResult.reason);
+            console.error(`${logContext} — IMAGE generation failed:`, imageResult.reason);
+        } else {
+            console.warn(`${logContext} — image generation returned no image (provider gave an empty result)`);
         }
 
         res.status(200).json({ success: true, data: { ...textResult.value, imageUrl } });

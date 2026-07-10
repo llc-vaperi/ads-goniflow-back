@@ -37,10 +37,13 @@ ${imagePrompt ? `სურათის კონტექსტი: ${imagePromp
 დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
 }
 
+const NO_TEXT_INSTRUCTION = "სურათზე არ უნდა იყოს არანაირი ტექსტი, წარწერა, ასოები, ციფრები ან watermark — მხოლოდ სუფთა ვიზუალი.";
+
 function buildImagePrompt(params: AdCopyParams): string {
     const { platform, projectName, projectDescription, imagePrompt } = params;
-    return imagePrompt
+    const basePrompt = imagePrompt
         || `რეკლამის სურათი ${platform} პლატფორმისთვის. პროექტი: ${projectName}. აღწერა: ${projectDescription || "არ არის მითითებული"}.`;
+    return `${basePrompt} ${NO_TEXT_INSTRUCTION}`;
 }
 
 async function generateText(params: AdCopyParams): Promise<AdCopy> {
@@ -69,7 +72,15 @@ async function generateImage(params: AdCopyParams): Promise<GeneratedImage | nul
 
     const parts = response.candidates?.[0]?.content?.parts ?? [];
     const imagePart = parts.find((p) => p.inlineData?.data);
-    if (!imagePart?.inlineData?.data) return null;
+    if (!imagePart?.inlineData?.data) {
+        console.warn(
+            "[gemini.provider] generateImage returned no inline image data — finishReason:",
+            response.candidates?.[0]?.finishReason,
+            "promptFeedback:",
+            response.promptFeedback
+        );
+        return null;
+    }
 
     const mimeType = imagePart.inlineData.mimeType || "image/png";
     const extension = MIME_TO_EXT[mimeType] || "png";
