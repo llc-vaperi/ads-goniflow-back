@@ -22,6 +22,11 @@ const cookieOptions = {
     httpOnly: true,
     secure: isProduction,
     sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    // Frontend and backend live on different subdomains of the same parent
+    // domain in production (e.g. ads.goniflow.com / ads-api.goniflow.com).
+    // Without an explicit Domain, the cookie is host-only and never reaches
+    // the frontend's own domain, so its Next.js middleware never sees it.
+    ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
 };
 
 // Helper function to set auth cookies
