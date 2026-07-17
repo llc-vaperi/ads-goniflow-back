@@ -1,21 +1,12 @@
 import { Router } from "express";
-import {
-    getCalendarEvents,
-    createCalendarEvent,
-    updateCalendarEvent,
-    deleteCalendarEvent
-} from "../controllers/calendar.controller.js";
+import { getCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "../controllers/calendar.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { validateBody } from "../middlewares/validate.middleware.js";
 import { createCalendarEventSchema, updateCalendarEventSchema } from "../validators/calendar.schema.js";
-
 const router = Router();
-
 router.use(requireAuth);
-
 router.get("/", getCalendarEvents);
 router.post("/", validateBody(createCalendarEventSchema), createCalendarEvent);
 router.put("/:id", validateBody(updateCalendarEventSchema), updateCalendarEvent);
 router.delete("/:id", deleteCalendarEvent);
-
 export default router;

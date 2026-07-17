@@ -38,7 +38,7 @@ export async function forgotPassword(email, redirectTo) {
         throw error;
     return data;
 }
-export async function resetPassword(accessToken, newPassword) {
+export async function resetPassword(accessToken, refreshToken, newPassword) {
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
         auth: {
             persistSession: false,
@@ -47,7 +47,7 @@ export async function resetPassword(accessToken, newPassword) {
     });
     const { error: sessionError } = await userClient.auth.setSession({
         access_token: accessToken,
-        refresh_token: accessToken,
+        refresh_token: refreshToken,
     });
     if (sessionError)
         throw sessionError;

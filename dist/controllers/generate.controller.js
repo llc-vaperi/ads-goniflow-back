@@ -1,17 +1,6 @@
-import { Type } from "@google/genai";
 import { supabase } from "../config/supabase.js";
-import { getGemini } from "../config/gemini.js";
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
-const adSchema = {
-    type: Type.OBJECT,
-    properties: {
-        headline: { type: Type.STRING },
-        text: { type: Type.STRING },
-        cta: { type: Type.STRING },
-        hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-    },
-    required: ["headline", "text", "cta", "hashtags"],
-};
+import { uploadBufferToStorage } from "../services/storage.service.js";
+import { getTextProvider, getImageProvider } from "../services/ai/index.js";
 export async function generateAd(req, res, next) {
     try {
         const userId = req.user?.id;
@@ -21,10 +10,6 @@ export async function generateAd(req, res, next) {
             return;
         }
         const { platform, tone, textPrompt, imagePrompt } = req.body;
-        if (!platform || !tone) {
-            res.status(400).json({ success: false, error: "platform and tone are required" });
-            return;
-        }
         const { data: project, error: projectError } = await supabase
             .from("projects")
             .select("name, description, link")
@@ -35,28 +20,45 @@ export async function generateAd(req, res, next) {
             res.status(404).json({ success: false, error: "Project not found" });
             return;
         }
-        const prompt = `შენ ხარ სარეკლამო კოპირაითერი. დაწერე რეკლამის ტექსტი ქართულ ენაზე ${platform} პლატფორმისთვის, ${tone} ტონით.
-
-პროექტის ინფორმაცია:
-- სახელი: ${project.name}
-- აღწერა: ${project.description || "არ არის მითითებული"}
-- ბმული: ${project.link || "არ არის მითითებული"}
-
-${textPrompt ? `დამატებითი ინსტრუქცია: ${textPrompt}` : ""}
-${imagePrompt ? `სურათის კონტექსტი: ${imagePrompt}` : ""}
-
-დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
-        const ai = getGemini();
-        const response = await ai.models.generateContent({
-            model: MODEL,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: adSchema,
-            },
-        });
-        const parsed = JSON.parse(response.text ?? "{}");
-        res.status(200).json({ success: true, data: parsed });
+        const params = {
+            platform,
+            tone,
+            textPrompt,
+            imagePrompt,
+            projectName: project.name,
+            projectDescription: project.description,
+            projectLink: project.link,
+        };
+        const textProviderName = (process.env.TEXT_AI_PROVIDER || process.env.AI_PROVIDER) === "grok" ? "grok" : "gemini";
+        const imageProviderName = (process.env.IMAGE_AI_PROVIDER || process.env.AI_PROVIDER) === "grok" ? "grok" : "gemini";
+        const logContext = `[generate] text=${textProviderName} image=${imageProviderName} projectId=${projectId} platform=${platform} tone=${tone}`;
+        const [textResult, imageResult] = await Promise.allSettled([
+            getTextProvider().generateText(params),
+            getImageProvider().generateImage(params),
+        ]);
+        if (textResult.status === "rejected") {
+            console.error(`${logContext} — TEXT generation failed:`, textResult.reason);
+            throw textResult.reason;
+        }
+        let imageUrl = null;
+        if (imageResult.status === "fulfilled" && imageResult.value) {
+            try {
+                const image = imageResult.value;
+                imageUrl = "url" in image
+                    ? image.url
+                    : await uploadBufferToStorage(userId, image.buffer, image.mimeType, image.extension);
+            }
+            catch (imageError) {
+                console.error(`${logContext} — image upload failed:`, imageError);
+            }
+        }
+        else if (imageResult.status === "rejected") {
+            console.error(`${logContext} — IMAGE generation failed:`, imageResult.reason);
+        }
+        else {
+            console.warn(`${logContext} — image generation returned no image (provider gave an empty result)`);
+        }
+        res.status(200).json({ success: true, data: { ...textResult.value, imageUrl } });
     }
     catch (error) {
         next(error);

@@ -14,10 +14,6 @@ export async function generateAd(req: Request, res: Response, next: NextFunction
         }
 
         const { platform, tone, textPrompt, imagePrompt } = req.body;
-        if (!platform || !tone) {
-            res.status(400).json({ success: false, error: "platform and tone are required" });
-            return;
-        }
 
         const { data: project, error: projectError } = await supabase
             .from("projects")

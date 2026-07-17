@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { supabase } from "../config/supabase.js";
+import { throwSafeDbError } from "../utils/dbError.js";
 
 // GET /api/v1/projects
 export async function getProjects(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -23,7 +24,7 @@ export async function getProjects(req: Request, res: Response, next: NextFunctio
                 res.status(200).json({ success: true, data: [], warning: "SQL tables not created yet in Supabase" });
                 return;
             }
-            throw error;
+            throwSafeDbError("getProjects", error, "Failed to load projects");
         }
 
         res.status(200).json({ success: true, data });
@@ -42,10 +43,6 @@ export async function createProject(req: Request, res: Response, next: NextFunct
         }
 
         const { name, link, description, logo_url } = req.body;
-        if (!name) {
-            res.status(400).json({ success: false, error: "Project name is required" });
-            return;
-        }
 
         const { data, error } = await supabase
             .from("projects")
@@ -61,7 +58,7 @@ export async function createProject(req: Request, res: Response, next: NextFunct
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) throwSafeDbError("createProject", error, "Failed to create project");
 
         res.status(201).json({ success: true, data });
     } catch (error) {
@@ -86,7 +83,7 @@ export async function deleteProject(req: Request, res: Response, next: NextFunct
             .eq("id", projectId)
             .eq("user_id", userId);
 
-        if (error) throw error;
+        if (error) throwSafeDbError("deleteProject", error, "Failed to delete project");
 
         res.status(200).json({ success: true, message: "Project deleted successfully" });
     } catch (error) {
@@ -106,10 +103,6 @@ export async function updateProject(req: Request, res: Response, next: NextFunct
         }
 
         const { name, link, description, logo_url } = req.body;
-        if (!name) {
-            res.status(400).json({ success: false, error: "Project name is required" });
-            return;
-        }
 
         const { data, error } = await supabase
             .from("projects")
@@ -124,7 +117,7 @@ export async function updateProject(req: Request, res: Response, next: NextFunct
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) throwSafeDbError("updateProject", error, "Failed to update project");
 
         res.status(200).json({ success: true, data });
     } catch (error) {
@@ -151,7 +144,7 @@ export async function getSavedAds(req: Request, res: Response, next: NextFunctio
             .eq("user_id", userId)
             .maybeSingle();
 
-        if (projectError) throw projectError;
+        if (projectError) throwSafeDbError("lookupProjectOwnership", projectError, "Failed to look up project");
         if (!project) {
             res.status(404).json({ success: false, error: "Project not found" });
             return;
@@ -170,7 +163,7 @@ export async function getSavedAds(req: Request, res: Response, next: NextFunctio
                 res.status(200).json({ success: true, data: [] });
                 return;
             }
-            throw error;
+            throwSafeDbError("getSavedAds", error, "Failed to load saved ads");
         }
 
         res.status(200).json({ success: true, data });
@@ -191,10 +184,6 @@ export async function saveAd(req: Request, res: Response, next: NextFunction): P
         }
 
         const { platform, tone, headline, text, cta, image_url } = req.body;
-        if (!text) {
-            res.status(400).json({ success: false, error: "Ad text is required" });
-            return;
-        }
 
         const { data: project, error: projectError } = await supabase
             .from("projects")
@@ -203,7 +192,7 @@ export async function saveAd(req: Request, res: Response, next: NextFunction): P
             .eq("user_id", userId)
             .maybeSingle();
 
-        if (projectError) throw projectError;
+        if (projectError) throwSafeDbError("lookupProjectOwnership", projectError, "Failed to look up project");
         if (!project) {
             res.status(404).json({ success: false, error: "Project not found" });
             return;
@@ -226,7 +215,7 @@ export async function saveAd(req: Request, res: Response, next: NextFunction): P
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) throwSafeDbError("saveAd", error, "Failed to save ad");
 
         res.status(201).json({ success: true, data });
     } catch (error) {
@@ -251,7 +240,7 @@ export async function deleteSavedAd(req: Request, res: Response, next: NextFunct
             .eq("id", adId)
             .eq("user_id", userId);
 
-        if (error) throw error;
+        if (error) throwSafeDbError("deleteSavedAd", error, "Failed to delete saved ad");
 
         res.status(200).json({ success: true, message: "Saved ad deleted successfully" });
     } catch (error) {

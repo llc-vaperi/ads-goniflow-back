@@ -21,3 +21,14 @@ export const authLimiter = rateLimit({
         error: "Too many login/registration attempts. Please try again after 15 minutes",
     },
 });
+// Stricter limiter for the AI generate endpoint (text + image generation is slow and costly)
+export const generateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each IP to 10 requests per `window`
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        error: "Too many generation requests. Please try again after 15 minutes",
+    },
+});

@@ -1,6 +1,17 @@
 import { Request, Response, NextFunction } from "express";
 import { uploadBufferToStorage } from "../services/storage.service.js";
 
+// Extension is derived from the validated mimetype, not the client-supplied
+// filename, so a mismatched/spoofed extension can't be used for the stored file.
+const MIME_TO_EXTENSION: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "image/avif": "avif",
+};
+
 export async function uploadImage(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
         if (!req.file) {
@@ -8,7 +19,11 @@ export async function uploadImage(req: Request, res: Response, next: NextFunctio
             return;
         }
 
-        const extension = req.file.originalname.split(".").pop() || "bin";
+        const extension = MIME_TO_EXTENSION[req.file.mimetype];
+        if (!extension) {
+            res.status(400).json({ success: false, error: "Unsupported image type" });
+            return;
+        }
         const url = await uploadBufferToStorage(req.user!.id, req.file.buffer, req.file.mimetype, extension);
 
         res.status(201).json({ success: true, data: { url } });
