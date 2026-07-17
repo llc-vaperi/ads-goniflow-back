@@ -26,7 +26,7 @@ const cookieOptions = {
     // domain in production (e.g. ads.goniflow.com / ads-api.goniflow.com).
     // Without an explicit Domain, the cookie is host-only and never reaches
     // the frontend's own domain, so its Next.js middleware never sees it.
-    ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+    ...(isProduction ? { domain: ".goniflow.com" } : {}),
 };
 
 // Helper function to set auth cookies
