@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { supabase } from "../config/supabase.js";
 import { uploadBufferToStorage } from "../services/storage.service.js";
-import { getTextProvider, getImageProvider } from "../services/ai/index.js";
+import { getTextProvider, getImageProvider, getTextProviderName, getImageProviderName } from "../services/ai/index.js";
 
 export async function generateAd(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -37,9 +37,7 @@ export async function generateAd(req: Request, res: Response, next: NextFunction
             projectLink: project.link,
         };
 
-        const textProviderName = (process.env.TEXT_AI_PROVIDER || process.env.AI_PROVIDER) === "grok" ? "grok" : "gemini";
-        const imageProviderName = (process.env.IMAGE_AI_PROVIDER || process.env.AI_PROVIDER) === "grok" ? "grok" : "gemini";
-        const logContext = `[generate] text=${textProviderName} image=${imageProviderName} projectId=${projectId} platform=${platform} tone=${tone}`;
+        const logContext = `[generate] text=${getTextProviderName()} image=${getImageProviderName()} projectId=${projectId} platform=${platform} tone=${tone}`;
 
         const [textResult, imageResult] = await Promise.allSettled([
             getTextProvider().generateText(params),

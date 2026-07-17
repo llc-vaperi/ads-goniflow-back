@@ -1,9 +1,17 @@
 import { AiProvider } from "./types.js";
 import { geminiProvider } from "./gemini.provider.js";
 import { grokProvider } from "./grok.provider.js";
+import { minimaxProvider } from "./minimax.provider.js";
 
 function resolveProvider(envValue: string | undefined): AiProvider {
-    return envValue === "grok" ? grokProvider : geminiProvider;
+    switch (envValue) {
+        case "grok":
+            return grokProvider;
+        case "minimax":
+            return minimaxProvider;
+        default:
+            return geminiProvider;
+    }
 }
 
 // AI_PROVIDER is the shared default; TEXT_AI_PROVIDER / IMAGE_AI_PROVIDER override it
@@ -15,6 +23,18 @@ export function getTextProvider(): AiProvider {
 
 export function getImageProvider(): AiProvider {
     return resolveProvider(process.env.IMAGE_AI_PROVIDER || process.env.AI_PROVIDER);
+}
+
+function resolveProviderName(envValue: string | undefined): string {
+    return envValue === "grok" || envValue === "minimax" ? envValue : "gemini";
+}
+
+export function getTextProviderName(): string {
+    return resolveProviderName(process.env.TEXT_AI_PROVIDER || process.env.AI_PROVIDER);
+}
+
+export function getImageProviderName(): string {
+    return resolveProviderName(process.env.IMAGE_AI_PROVIDER || process.env.AI_PROVIDER);
 }
 
 export * from "./types.js";
