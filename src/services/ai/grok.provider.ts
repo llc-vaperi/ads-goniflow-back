@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { AdCopy, AdCopyParams, AiProvider, GeneratedImage } from "./types.js";
+import { buildAdCopyPrompt, buildImagePrompt } from "./prompts.js";
 
 // grok-4.5 is region-restricted (blocked in the EU as of mid-2026) — grok-4.3 has no such
 // restriction, so it's the safer default; override with GROK_TEXT_MODEL where 4.5 is available.
@@ -20,39 +21,11 @@ function getClient(): OpenAI {
     return client;
 }
 
-function buildTextPrompt(params: AdCopyParams): string {
-    const { platform, tone, projectName, projectDescription, projectLink, textPrompt, imagePrompt } = params;
-    return `შენ ხარ სარეკლამო კოპირაითერი. დაწერე რეკლამის ტექსტი ქართულ ენაზე ${platform} პლატფორმისთვის, ${tone} ტონით.
-
-პროექტის ინფორმაცია:
-- სახელი: ${projectName}
-- აღწერა: ${projectDescription || "არ არის მითითებული"}
-- ბმული: ${projectLink || "არ არის მითითებული"}
-
-${textPrompt ? `დამატებითი ინსტრუქცია: ${textPrompt}` : ""}
-${imagePrompt ? `სურათის კონტექსტი: ${imagePrompt}` : ""}
-
-მნიშვნელოვანი: პროექტის სახელი ("${projectName}") და ბმული ("${projectLink || ""}") ზუსტად ისე გამოიყენე, როგორც მოცემულია — არ თარგმნო და არ გადმოწერო ქართული ასოებით (ტრანსლიტერაცია), დატოვე ორიგინალი ლათინური/ორიგინალური დამწერლობით.
-
-დასაშვებია მინიმალურად, ზომიერად გამოიყენო რელევანტური emoji/აიკონები (headline-ში და text-ში) რომ ტექსტი უფრო ცოცხალი იყოს — მაგრამ არ გადატვირთო, მაქსიმუმ 1-2 emoji მთელ პოსტში საკმარისია, თუ საერთოდ საჭიროა.
-
-დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
-}
-
-const NO_TEXT_INSTRUCTION = "სურათზე არ უნდა იყოს არანაირი ტექსტი, წარწერა, ასოები, ციფრები ან watermark — მხოლოდ სუფთა ვიზუალი.";
-
-function buildImagePrompt(params: AdCopyParams): string {
-    const { platform, projectName, projectDescription, imagePrompt } = params;
-    const basePrompt = imagePrompt
-        || `რეკლამის სურათი ${platform} პლატფორმისთვის. პროექტი: ${projectName}. აღწერა: ${projectDescription || "არ არის მითითებული"}.`;
-    return `${basePrompt} ${NO_TEXT_INSTRUCTION}`;
-}
-
 async function generateText(params: AdCopyParams): Promise<AdCopy> {
     const openai = getClient();
     const response = await openai.chat.completions.create({
         model: TEXT_MODEL,
-        messages: [{ role: "user", content: buildTextPrompt(params) }],
+        messages: [{ role: "user", content: buildAdCopyPrompt(params) }],
         response_format: {
             type: "json_schema",
             json_schema: {

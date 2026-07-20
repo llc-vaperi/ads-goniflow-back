@@ -86,10 +86,11 @@ export async function generateAdImage(req: Request, res: Response, next: NextFun
                     ? image.url
                     : await uploadBufferToStorage(userId, image.buffer, image.mimeType, image.extension);
             } else {
-                console.warn(`${logContext} — image generation returned no image (provider gave an empty result)`);
+                throw new Error("Image generation returned an empty result");
             }
         } catch (imageError) {
             console.error(`${logContext} — IMAGE generation failed:`, imageError);
+            throw imageError;
         }
 
         res.status(200).json({ success: true, data: { imageUrl } });

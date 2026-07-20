@@ -1,4 +1,5 @@
 import { AdCopy, AdCopyParams, AiProvider, GeneratedImage } from "./types.js";
+import { buildAdCopyPrompt, buildImagePrompt, IMAGE_ASPECT_RATIOS, IMAGE_DIMENSIONS } from "./prompts.js";
 
 const TEXT_MODEL = process.env.MINIMAX_TEXT_MODEL || "abab6.5s-chat";
 const IMAGE_MODEL = process.env.MINIMAX_IMAGE_MODEL || "image-01";
@@ -12,34 +13,6 @@ function getApiKey(): string {
     return apiKey;
 }
 
-function buildTextPrompt(params: AdCopyParams): string {
-    const { platform, tone, projectName, projectDescription, projectLink, textPrompt, imagePrompt } = params;
-    return `შენ ხარ სარეკლამო კოპირაითერი. დაწერე რეკლამის ტექსტი ქართულ ენაზე ${platform} პლატფორმისთვის, ${tone} ტონით.
-
-პროექტის ინფორმაცია:
-- სახელი: ${projectName}
-- აღწერა: ${projectDescription || "არ არის მითითებული"}
-- ბმული: ${projectLink || "არ არის მითითებული"}
-
-${textPrompt ? `დამატებითი ინსტრუქცია: ${textPrompt}` : ""}
-${imagePrompt ? `სურათის კონტექსტი: ${imagePrompt}` : ""}
-
-მნიშვნელოვანი: პროექტის სახელი ("${projectName}") და ბმული ("${projectLink || ""}") ზუსტად ისე გამოიყენე, როგორც მოცემულია — არ თარგმნო და არ გადმოწერო ქართული ასოებით (ტრანსლიტერაცია), დატოვე ორიგინალი ლათინური/ორიგინალური დამწერლობით.
-
-დასაშვებია მინიმალურად, ზომიერად გამოიყენო რელევანტური emoji/აიკონები (headline-ში და text-ში) რომ ტექსტი უფრო ცოცხალი იყოს — მაგრამ არ გადატვირთო, მაქსიმუმ 1-2 emoji მთელ პოსტში საკმარისია, თუ საერთოდ საჭიროა.
-
-დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
-}
-
-const NO_TEXT_INSTRUCTION = "სურათზე არ უნდა იყოს არანაირი ტექსტი, წარწერა, ასოები, ციფრები ან watermark — მხოლოდ სუფთა ვიზუალი.";
-
-function buildImagePrompt(params: AdCopyParams): string {
-    const { platform, projectName, projectDescription, imagePrompt } = params;
-    const basePrompt = imagePrompt
-        || `რეკლამის სურათი ${platform} პლატფორმისთვის. პროექტი: ${projectName}. აღწერა: ${projectDescription || "არ არის მითითებული"}.`;
-    return `${basePrompt} ${NO_TEXT_INSTRUCTION}`;
-}
-
 async function generateText(params: AdCopyParams): Promise<AdCopy> {
     const apiKey = getApiKey();
     const response = await fetch(`${BASE_URL}/text/chatcompletion_v2`, {
@@ -50,7 +23,7 @@ async function generateText(params: AdCopyParams): Promise<AdCopy> {
         },
         body: JSON.stringify({
             model: TEXT_MODEL,
-            messages: [{ role: "user", content: buildTextPrompt(params) }],
+            messages: [{ role: "user", content: buildAdCopyPrompt(params) }],
             response_format: { type: "json_object" },
         }),
     });
@@ -66,33 +39,45 @@ async function generateText(params: AdCopyParams): Promise<AdCopy> {
 
 async function generateImage(params: AdCopyParams): Promise<GeneratedImage | null> {
     const apiKey = getApiKey();
+    const dimensions = IMAGE_DIMENSIONS[params.platform];
+    const prompt = buildImagePrompt(params).slice(0, 1500);
+    const supportsCustomDimensions = IMAGE_MODEL === "image-01";
+    const imagePayload = {
+        model: IMAGE_MODEL,
+        prompt,
+        response_format: "base64",
+        n: 1,
+        prompt_optimizer: true,
+        ...(supportsCustomDimensions && dimensions
+            ? dimensions
+            : { aspect_ratio: IMAGE_ASPECT_RATIOS[params.platform] || "1:1" }),
+    };
+
     const response = await fetch(`${BASE_URL}/image_generation`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-            model: IMAGE_MODEL,
-            prompt: buildImagePrompt(params),
-            aspect_ratio: "1:1",
-            response_format: "url",
-            n: 1,
-        }),
+        body: JSON.stringify(imagePayload),
     });
 
     if (!response.ok) {
-        console.warn(`[minimax.provider] generateImage request failed: ${response.status} ${await response.text()}`);
-        return null;
+        throw new Error(`Minimax image generation failed: ${response.status} ${await response.text()}`);
     }
 
     const data = await response.json();
-    const url = data?.data?.image_urls?.[0];
-    if (!url) {
-        console.warn("[minimax.provider] generateImage returned no image URL — response:", data);
+    const base64Image = data?.data?.image_base64?.[0];
+    if (!base64Image) {
+        console.warn("[minimax.provider] generateImage returned no base64 image — response:", data);
         return null;
     }
-    return { url };
+
+    return {
+        buffer: Buffer.from(base64Image, "base64"),
+        mimeType: "image/jpeg",
+        extension: "jpg",
+    };
 }
 
 export const minimaxProvider: AiProvider = { generateText, generateImage };
