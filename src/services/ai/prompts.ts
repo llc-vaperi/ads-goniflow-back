@@ -90,10 +90,10 @@ export const IMAGE_ASPECT_RATIOS: Record<string, string> = {
 };
 
 export const IMAGE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-    facebook: { width: 2048, height: 2048 },
-    instagram: { width: 1600, height: 2000 },
-    linkedin: { width: 2048, height: 1072 },
-    x: { width: 2048, height: 1152 },
+    facebook: { width: 1024, height: 1024 },
+    instagram: { width: 1024, height: 1280 },
+    linkedin: { width: 1280, height: 670 },
+    x: { width: 1280, height: 720 },
 };
 
 const QUALITY_INSTRUCTION = [
