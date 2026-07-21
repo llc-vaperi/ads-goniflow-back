@@ -1,6 +1,7 @@
 import { Type, Modality } from "@google/genai";
 import { getGemini } from "../../config/gemini.js";
 import { AdCopy, AdCopyParams, AiProvider, GeneratedImage } from "./types.js";
+import { buildAdCopyPrompt, buildImagePrompt } from "./prompts.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
 const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
@@ -22,39 +23,11 @@ const adSchema = {
     required: ["headline", "text", "cta", "hashtags"],
 };
 
-function buildTextPrompt(params: AdCopyParams): string {
-    const { platform, tone, projectName, projectDescription, projectLink, textPrompt, imagePrompt } = params;
-    return `შენ ხარ სარეკლამო კოპირაითერი. დაწერე რეკლამის ტექსტი ქართულ ენაზე ${platform} პლატფორმისთვის, ${tone} ტონით.
-
-პროექტის ინფორმაცია:
-- სახელი: ${projectName}
-- აღწერა: ${projectDescription || "არ არის მითითებული"}
-- ბმული: ${projectLink || "არ არის მითითებული"}
-
-${textPrompt ? `დამატებითი ინსტრუქცია: ${textPrompt}` : ""}
-${imagePrompt ? `სურათის კონტექსტი: ${imagePrompt}` : ""}
-
-მნიშვნელოვანი: პროექტის სახელი ("${projectName}") და ბმული ("${projectLink || ""}") ზუსტად ისე გამოიყენე, როგორც მოცემულია — არ თარგმნო და არ გადმოწერო ქართული ასოებით (ტრანსლიტერაცია), დატოვე ორიგინალი ლათინური/ორიგინალური დამწერლობით.
-
-დასაშვებია მინიმალურად, ზომიერად გამოიყენო რელევანტური emoji/აიკონები (headline-ში და text-ში) რომ ტექსტი უფრო ცოცხალი იყოს — მაგრამ არ გადატვირთო, მაქსიმუმ 1-2 emoji მთელ პოსტში საკმარისია, თუ საერთოდ საჭიროა.
-
-დააბრუნე headline (მოკლე სათაური), text (რეკლამის ძირითადი ტექსტი), cta (მოქმედებისკენ მოწოდება) და hashtags (რელევანტური ჰეშტეგების მასივი).`;
-}
-
-const NO_TEXT_INSTRUCTION = "სურათზე არ უნდა იყოს არანაირი ტექსტი, წარწერა, ასოები, ციფრები ან watermark — მხოლოდ სუფთა ვიზუალი.";
-
-function buildImagePrompt(params: AdCopyParams): string {
-    const { platform, projectName, projectDescription, imagePrompt } = params;
-    const basePrompt = imagePrompt
-        || `რეკლამის სურათი ${platform} პლატფორმისთვის. პროექტი: ${projectName}. აღწერა: ${projectDescription || "არ არის მითითებული"}.`;
-    return `${basePrompt} ${NO_TEXT_INSTRUCTION}`;
-}
-
 async function generateText(params: AdCopyParams): Promise<AdCopy> {
     const ai = getGemini();
     const response = await ai.models.generateContent({
         model: MODEL,
-        contents: buildTextPrompt(params),
+        contents: buildAdCopyPrompt(params),
         config: {
             responseMimeType: "application/json",
             responseSchema: adSchema,

@@ -8,12 +8,12 @@ import {
     saveAd,
     deleteSavedAd
 } from "../controllers/projects.controller.js";
-import { generateAd } from "../controllers/generate.controller.js";
+import { generateAdText, generateAdImage } from "../controllers/generate.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { generateLimiter } from "../middlewares/rateLimit.middleware.js";
 import { validateBody } from "../middlewares/validate.middleware.js";
 import { createProjectSchema, updateProjectSchema, saveAdSchema } from "../validators/projects.schema.js";
-import { generateAdSchema } from "../validators/generate.schema.js";
+import { generateTextSchema, generateImageSchema } from "../validators/generate.schema.js";
 
 const router = Router();
 
@@ -31,8 +31,9 @@ router.get("/:projectId/ads", getSavedAds);
 router.post("/:projectId/ads", validateBody(saveAdSchema), saveAd);
 router.delete("/:projectId/ads/:adId", deleteSavedAd);
 
-// AI-generated ad copy
-router.post("/:projectId/generate", generateLimiter, validateBody(generateAdSchema), generateAd);
+// AI-generated ad copy / image
+router.post("/:projectId/generate-text", generateLimiter, validateBody(generateTextSchema), generateAdText);
+router.post("/:projectId/generate-image", generateLimiter, validateBody(generateImageSchema), generateAdImage);
 
 export default router;
 
