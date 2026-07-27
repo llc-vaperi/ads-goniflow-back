@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 
 export interface CustomError extends Error {
     statusCode?: number;
+    code?: string;
 }
 
 export const globalErrorHandler = (
@@ -22,6 +23,7 @@ export const globalErrorHandler = (
         success: false,
         error: {
             message,
+            ...(err.code && { code: err.code }),
             ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
         },
     });

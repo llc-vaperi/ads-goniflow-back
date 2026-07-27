@@ -18,7 +18,11 @@ app.use(cors({
     credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({
+    verify: (req, _res, buffer) => {
+        (req as express.Request).rawBody = Buffer.from(buffer);
+    },
+}));
 
 
 // Default route
