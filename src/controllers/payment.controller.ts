@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from "express";
 import { getActivePaymentProvider } from "../services/payments/index.js";
-import { bogProvider } from "../services/payments/bog.provider.js";
 import { stripeProvider } from "../services/payments/stripe.provider.js";
 
 export async function startCheckout(
@@ -23,23 +22,6 @@ export async function startCheckout(
         );
 
         res.status(200).json({ success: true, data: checkout });
-    } catch (error) {
-        next(error);
-    }
-}
-
-export async function receiveBogCallback(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-): Promise<void> {
-    try {
-        if (!req.rawBody) {
-            res.status(400).json({ success: false, error: "Invalid payment callback" });
-            return;
-        }
-        await bogProvider.handleWebhook(req.rawBody, req.headers);
-        res.status(200).json({ success: true });
     } catch (error) {
         next(error);
     }

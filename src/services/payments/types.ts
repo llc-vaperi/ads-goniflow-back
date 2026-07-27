@@ -7,7 +7,7 @@ export interface PaymentCheckoutResult {
 }
 
 export interface PaymentProvider {
-    name: "bog" | "stripe";
+    name: "stripe";
     isConfigured(): boolean;
     createCheckout(
         userId: string,

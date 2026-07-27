@@ -11,7 +11,7 @@ function isConfigured(): boolean {
     return Boolean(
         process.env.STRIPE_SECRET_KEY
         && process.env.STRIPE_WEBHOOK_SECRET
-        && (process.env.PAYMENT_RETURN_URL || process.env.BOG_RETURN_URL),
+        && process.env.PAYMENT_RETURN_URL,
     );
 }
 
@@ -31,7 +31,7 @@ function getStripeClient(): Stripe {
 }
 
 function getReturnUrl(): string {
-    const returnUrl = process.env.PAYMENT_RETURN_URL || process.env.BOG_RETURN_URL;
+    const returnUrl = process.env.PAYMENT_RETURN_URL;
     if (!returnUrl) {
         throw paymentError(
             "Stripe payments are not configured",
