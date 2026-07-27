@@ -1,11 +1,9 @@
 import { createVerify } from "node:crypto";
-import { getSupabaseAdmin } from "../config/supabaseAdmin.js";
-import { CustomError } from "../middlewares/error.middleware.js";
-import {
-    CreditPurchase,
-    createCreditPurchase,
-} from "./credit-purchases.service.js";
-import { throwSafeDbError } from "../utils/dbError.js";
+import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
+import { createCreditPurchase } from "../credit-purchases.service.js";
+import { throwSafeDbError } from "../../utils/dbError.js";
+import { markPurchasePending, paymentError, reuseExistingCheckout } from "./shared.js";
+import { PaymentCheckoutResult, PaymentProvider } from "./types.js";
 
 interface BogConfig {
     apiBaseUrl: string;
@@ -42,12 +40,6 @@ interface BogPaymentDetails {
     };
 }
 
-interface BogCheckoutResult {
-    purchase: CreditPurchase;
-    checkoutUrl: string;
-    orderId: string;
-}
-
 const DEFAULT_BOG_CALLBACK_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu4RUyAw3+CdkS3ZNILQh
 zHI9Hemo+vKB9U2BSabppkKjzjjkf+0Sm76hSMiu/HFtYhqWOESryoCDJoqffY0Q
@@ -65,17 +57,19 @@ let tokenCache:
     }
     | undefined;
 
-function paymentError(message: string, code: string, statusCode = 502): CustomError {
-    const error = new Error(message) as CustomError;
-    error.code = code;
-    error.statusCode = statusCode;
-    return error;
+function isConfigured(): boolean {
+    return Boolean(
+        process.env.BOG_CLIENT_ID
+        && process.env.BOG_CLIENT_SECRET
+        && (process.env.PAYMENT_RETURN_URL || process.env.BOG_RETURN_URL)
+        && process.env.BOG_CALLBACK_URL,
+    );
 }
 
 function getConfig(): BogConfig {
     const clientId = process.env.BOG_CLIENT_ID;
     const clientSecret = process.env.BOG_CLIENT_SECRET;
-    const returnUrl = process.env.BOG_RETURN_URL;
+    const returnUrl = process.env.PAYMENT_RETURN_URL || process.env.BOG_RETURN_URL;
     const callbackUrl = process.env.BOG_CALLBACK_URL;
 
     if (!clientId || !clientSecret || !returnUrl || !callbackUrl) {
@@ -165,48 +159,6 @@ async function authenticatedBogFetch(
     });
 }
 
-async function markPurchasePending(
-    purchaseId: string,
-    orderId: string,
-    checkoutUrl: string,
-): Promise<CreditPurchase> {
-    const { data, error } = await getSupabaseAdmin()
-        .from("credit_purchases")
-        .update({
-            provider: "bog",
-            provider_order_id: orderId,
-            checkout_url: checkoutUrl,
-            status: "pending",
-            updated_at: new Date().toISOString(),
-        })
-        .eq("id", purchaseId)
-        .eq("status", "created")
-        .select("id, product_id, quantity, amount_gel, credits, provider, provider_order_id, checkout_url, status, created_at, paid_at")
-        .single();
-
-    if (error || !data) {
-        throwSafeDbError(
-            "markBogPurchasePending",
-            error,
-            "Failed to initialize payment",
-        );
-    }
-
-    return {
-        id: data.id,
-        productId: data.product_id,
-        quantity: data.quantity,
-        amountGel: Number(data.amount_gel),
-        credits: data.credits,
-        provider: data.provider,
-        providerOrderId: data.provider_order_id,
-        checkoutUrl: data.checkout_url,
-        status: data.status,
-        createdAt: data.created_at,
-        paidAt: data.paid_at,
-    };
-}
-
 function createReturnUrl(
     baseUrl: string,
     purchaseId: string,
@@ -218,12 +170,12 @@ function createReturnUrl(
     return url.toString();
 }
 
-export async function createBogCheckout(
+async function createCheckout(
     userId: string,
     productId: string,
     quantity: number,
     idempotencyKey?: string,
-): Promise<BogCheckoutResult> {
+): Promise<PaymentCheckoutResult> {
     const purchase = await createCreditPurchase(
         userId,
         productId,
@@ -231,17 +183,9 @@ export async function createBogCheckout(
         idempotencyKey,
     );
 
-    if (
-        purchase.status === "pending"
-        && purchase.provider === "bog"
-        && purchase.providerOrderId
-        && purchase.checkoutUrl
-    ) {
-        return {
-            purchase,
-            checkoutUrl: purchase.checkoutUrl,
-            orderId: purchase.providerOrderId,
-        };
+    const reused = reuseExistingCheckout(purchase, "bog");
+    if (reused) {
+        return reused;
     }
 
     if (purchase.status !== "created") {
@@ -305,6 +249,7 @@ export async function createBogCheckout(
 
     const pendingPurchase = await markPurchasePending(
         purchase.id,
+        "bog",
         order.id,
         checkoutUrl,
     );
@@ -314,6 +259,20 @@ export async function createBogCheckout(
         checkoutUrl,
         orderId: order.id,
     };
+}
+
+function verifyCallbackSignature(rawBody: Buffer, signature: string): boolean {
+    try {
+        const verifier = createVerify("RSA-SHA256");
+        verifier.update(rawBody);
+        verifier.end();
+        return verifier.verify(
+            getConfig().callbackPublicKey,
+            Buffer.from(signature, "base64"),
+        );
+    } catch {
+        return false;
+    }
 }
 
 async function getBogPaymentDetails(orderId: string): Promise<BogPaymentDetails> {
@@ -333,24 +292,7 @@ async function getBogPaymentDetails(orderId: string): Promise<BogPaymentDetails>
     return payload as BogPaymentDetails;
 }
 
-export function verifyBogCallbackSignature(
-    rawBody: Buffer,
-    signature: string,
-): boolean {
-    try {
-        const verifier = createVerify("RSA-SHA256");
-        verifier.update(rawBody);
-        verifier.end();
-        return verifier.verify(
-            getConfig().callbackPublicKey,
-            Buffer.from(signature, "base64"),
-        );
-    } catch {
-        return false;
-    }
-}
-
-export async function processBogCallback(orderId: string): Promise<void> {
+async function processCallback(orderId: string): Promise<void> {
     const payment = await getBogPaymentDetails(orderId);
     const admin = getSupabaseAdmin();
     const { data: purchase, error } = await admin
@@ -442,3 +384,40 @@ export async function processBogCallback(orderId: string): Promise<void> {
         }
     }
 }
+
+async function handleWebhook(
+    rawBody: Buffer,
+    headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+    const signatureHeader = headers["callback-signature"];
+    const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+
+    if (!signature || !verifyCallbackSignature(rawBody, signature)) {
+        throw paymentError(
+            "Invalid callback signature",
+            "INVALID_CALLBACK_SIGNATURE",
+            401,
+        );
+    }
+
+    let body: { event?: string; body?: { order_id?: string } };
+    try {
+        body = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+        throw paymentError("Invalid payment callback", "INVALID_CALLBACK_PAYLOAD", 400);
+    }
+
+    const orderId = body?.body?.order_id;
+    if (body?.event !== "order_payment" || typeof orderId !== "string" || !orderId.trim()) {
+        throw paymentError("Invalid payment callback", "INVALID_CALLBACK_PAYLOAD", 400);
+    }
+
+    await processCallback(orderId.trim());
+}
+
+export const bogProvider: PaymentProvider = {
+    name: "bog",
+    isConfigured,
+    createCheckout,
+    handleWebhook,
+};

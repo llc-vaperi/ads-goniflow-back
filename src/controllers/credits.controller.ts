@@ -9,6 +9,7 @@ import {
     getCreditHistory,
     getCreditUsageSummary,
 } from "../services/credits.service.js";
+import { getActivePaymentProvider } from "../services/payments/index.js";
 
 function requireUserId(req: Request, res: Response): string | null {
     const userId = req.user?.id;
@@ -81,6 +82,7 @@ export function getCatalog(
     req: Request,
     res: Response,
 ): void {
+    const provider = getActivePaymentProvider();
     res.status(200).json({
         success: true,
         data: {
@@ -88,13 +90,8 @@ export function getCatalog(
             generationCosts: GENERATION_CREDIT_COSTS,
             products: CREDIT_PRODUCTS,
             payment: {
-                provider: 'bog',
-                enabled: Boolean(
-                    process.env.BOG_CLIENT_ID
-                    && process.env.BOG_CLIENT_SECRET
-                    && process.env.BOG_RETURN_URL
-                    && process.env.BOG_CALLBACK_URL
-                ),
+                provider: provider.name,
+                enabled: provider.isConfigured(),
             },
         },
     });
